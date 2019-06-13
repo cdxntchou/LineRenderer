@@ -39,6 +39,13 @@ public class LineRendererProxy : MonoBehaviour
             matrices.Add(Matrix4x4.TRS(new Vector3(10.0f, 10.0f, 0.0f), Quaternion.identity, Vector3.one));
             matrices.Add(Matrix4x4.TRS(new Vector3(0.0f, 0.0f, 20.0f), Quaternion.identity, Vector3.one));
         }
+        else
+        {
+            matrices[0] = Matrix4x4.TRS(
+                new Vector3(Mathf.Sin(Time.time), 0.0f, 0.0f),
+                Quaternion.AngleAxis(Time.time * 10.0f, new Vector3(1.0f, 0.7f, 1.2f)),
+                new Vector3(2.0f, 1.0f, 1.0f));
+        }
 
         if ((theMesh != null) && (theMaterial != null) && (matrices != null) && (matrices.Count > 0))
             Graphics.DrawMeshInstanced(theMesh, 0, theMaterial, matrices, properties, ShadowCastingMode.Off, false, 0, null, LightProbeUsage.Off);
