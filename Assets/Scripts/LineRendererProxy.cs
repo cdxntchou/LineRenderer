@@ -36,6 +36,7 @@ public class LineRendererProxy : MonoBehaviour
     {
         public Vector3 v0;
         public Vector3 v1;
+        public Vector3 color;
     }
 
     void AddLine(int v0, int v1, Mesh mesh, List<Line> lines, HashSet<int> vertPairs)
@@ -65,6 +66,7 @@ public class LineRendererProxy : MonoBehaviour
             {
                 v0 = mesh.vertices[v0],
                 v1 = mesh.vertices[v1],
+                color = new Vector3(Random.value, Random.value, Random.value),
             });
     }
 

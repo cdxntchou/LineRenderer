@@ -35,6 +35,7 @@
 			{
 				float3 v0;
 				float3 v1;
+				float3 color;
 			};
 			StructuredBuffer<Line> _LineBuffer;
 
@@ -84,6 +85,7 @@
 				// two line end points
 				float3 p0 = _LineBuffer[lineIndex].v0;
 				float3 p1 = _LineBuffer[lineIndex].v1;
+				float3 color = _LineBuffer[lineIndex].color;
 				float3 delta = p1 - p0;
 				float deltaDist = length(delta);
 				float3 deltaNormalized = delta / deltaDist;
@@ -185,7 +187,7 @@
 				uv.y = quadV.y * o.vertex.w;
 
 				o.uvw = float3(uv, o.vertex.w);
-				o.color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+				o.color = float4(color.rgb, 1.0f);
 
 				// UNITY_TRANSFER_FOG(o,o.vertex);
                 return o;
@@ -269,7 +271,7 @@
 					1.0f,
 					uv.xx);
 
-				float4 col = float4(1.0f, 1.0f, 0.0f, alpha * endAlpha);
+				float4 col = float4(i.color.rgb, alpha * endAlpha);
 
 				// apply fog
                 // UNITY_APPLY_FOG(i.fogCoord, col);
