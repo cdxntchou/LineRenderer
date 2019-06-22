@@ -66,7 +66,8 @@
 				UNITY_DEFINE_INSTANCED_PROP(float4, _LineClamp)
 			UNITY_INSTANCING_BUFFER_END(Props)
 
-#define LINESIZE 3
+// TODO: LINESIZE could be per line...
+#define LINESIZE 1
 
             v2f vert(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_InstanceID)
             {
@@ -85,18 +86,25 @@
 				// two line end points
 				float3 p0 = _LineBuffer[lineIndex].v0;
 				float3 p1 = _LineBuffer[lineIndex].v1;
+
+				// TODO: apply object -> world transform here!
+				// could do instanced if necessary
+
 				float3 color = _LineBuffer[lineIndex].color;
 				float3 delta = p1 - p0;
 				float deltaDist = length(delta);
 				float3 deltaNormalized = delta / deltaDist;
 
 				// construct the 4 corners of the quad we want to draw
+				// we approximate the size of a pixel (not very well) in order to 
+				// move the corners out from the line enough to encompass the desired width of the line
 				float3 p0ToCamera = _WorldSpaceCameraPos - p0;
 				float3 p1ToCamera = _WorldSpaceCameraPos - p1;
 				float p0Dist = length(p0ToCamera);
 				float p1Dist = length(p1ToCamera);
 
-				float lineSize = 0.001f * LINESIZE;		// TODO: correct for edge-on projection, and per-line pixel size
+				float lineTweak = 0.001f;		// TODO: this value should be calculated based on target resolution
+				float lineSize = lineTweak * (LINESIZE + 1);		// TODO: correct for edge-on projection
 				float p0PixelSize = lineSize * p0Dist;
 				float p1PixelSize = lineSize * p1Dist;
 
@@ -177,6 +185,9 @@
 				float total = deltaDist + p0PixelSize + p1PixelSize;
 				float scale = total / deltaDist;
 				float offset = -scale * p0PixelSize / total;
+
+				// TODO: we could instead pass down the idealized UV coords in screenspace,
+				// based on the projected line.. would give us better endcap results probably
 
 				// uv.x is along the line, in world space, such that [0,1] represents exactly the [p0, p1] range
 				// uv.y is perpendicular to the line, in screenspace.  [0,1] is across the geometry
@@ -275,6 +286,9 @@
 
 				// apply fog
                 // UNITY_APPLY_FOG(i.fogCoord, col);
+
+//				col *= col;
+
                 return col;
             }
             ENDCG
