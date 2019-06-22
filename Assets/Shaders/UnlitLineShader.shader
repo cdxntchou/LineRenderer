@@ -16,6 +16,7 @@
 			ZTest Always
 			ZWrite Off
 //			Blend Off
+//			Blend SrcAlpha One
 			Blend SrcAlpha OneMinusSrcAlpha
 
             CGPROGRAM
@@ -64,7 +65,7 @@
 				UNITY_DEFINE_INSTANCED_PROP(float4, _LineClamp)
 			UNITY_INSTANCING_BUFFER_END(Props)
 
-#define LINESIZE 8
+#define LINESIZE 3
 
             v2f vert(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_InstanceID)
             {
@@ -73,7 +74,8 @@
 				float lineIndex = floor((vertexIndex + 0.5f) / 6);
 				float lineVertex = vertexIndex - lineIndex * 6;			// 0 - 5
 
-				// each quad is defined by 6 vertices (two triangles):
+				// we build a quad for each line
+				// each quad is defined by 6 vertices (two triangles)
 				// quadV.x = 0, 0, 1, 1, 1, 0
 				// quadV.y = 0, 1, 1, 1, 0, 0
 				float2 quadV = (float2)
@@ -83,14 +85,16 @@
 				float3 p0 = _LineBuffer[lineIndex].v0;
 				float3 p1 = _LineBuffer[lineIndex].v1;
 				float3 delta = p1 - p0;
-				float3 deltaNormalized = normalize(delta);
+				float deltaDist = length(delta);
+				float3 deltaNormalized = delta / deltaDist;
 
+				// construct the 4 corners of the quad we want to draw
 				float3 p0ToCamera = _WorldSpaceCameraPos - p0;
 				float3 p1ToCamera = _WorldSpaceCameraPos - p1;
 				float p0Dist = length(p0ToCamera);
 				float p1Dist = length(p1ToCamera);
 
-				float lineSize = 0.001f * LINESIZE;		// TODO: correct for projection and per-line pixel size
+				float lineSize = 0.001f * LINESIZE;		// TODO: correct for edge-on projection, and per-line pixel size
 				float p0PixelSize = lineSize * p0Dist;
 				float p1PixelSize = lineSize * p1Dist;
 
@@ -104,12 +108,13 @@
 				float3 v0 = p0 - deltaNormalized * p0PixelSize;
 				float3 v1 = p1 + deltaNormalized * p1PixelSize;
 
+				// these are the 4 corners
 				float3 v0_0 = v0 - p0Perp;
 				float3 v0_1 = v0 + p0Perp;
-
 				float3 v1_0 = v1 - p1Perp;
 				float3 v1_1 = v1 + p1Perp;
 
+				// choose the corner based on quadV
 				float3 vertexPositionWorld=
 					lerp(
 						lerp(v0_0, v0_1, quadV.y),
@@ -155,8 +160,31 @@
 
 //				o.position = ComputeScreenPos(o.vertex);
 
-				// we have to correct the uv coordinates we pass down, so they are interpolated in screenspace not in 3D space
-				o.uvw = float3(quadV * o.vertex.w, o.vertex.w);
+//				<------------------ quadV [0,1] ---------------->
+//				<- p0PixelSize -><- deltaDist -><- p1PixelSize ->
+//								 <-- u [0,1] -->
+//				u(quadV) = 0,  quadV = p0PixelSize / total;
+//				u(quadV) = 1,  quadV = (p0PixelSize + detalDist) / total;
+//				u(quadV) = k * quadV + o;
+//				0 = k * p0PixelSize / total + o
+//				1 = k * (p0PixelSize + deltaDist) / total + o
+//				1 = k * (p0PixelSize + deltaDist - p0PixelSize) / total
+//				1 = k * deltaDist / total
+//				total / deltaDist = k
+
+				float total = deltaDist + p0PixelSize + p1PixelSize;
+				float scale = total / deltaDist;
+				float offset = -scale * p0PixelSize / total;
+
+				// uv.x is along the line, in world space, such that [0,1] represents exactly the [p0, p1] range
+				// uv.y is perpendicular to the line, in screenspace.  [0,1] is across the geometry
+				//		actual distance doesn't matter too much, just has to cover the relevant pixels, centered on 0.5 and be linearly varying in screenspace
+				float2 uv;
+				uv.x = quadV.x * scale + offset;
+				uv.x *= o.vertex.w;
+				uv.y = quadV.y * o.vertex.w;
+
+				o.uvw = float3(uv, o.vertex.w);
 				o.color = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
 				// UNITY_TRANSFER_FOG(o,o.vertex);
@@ -229,12 +257,19 @@
 //				float alpha = line_aa(pixelPosition, fx, fy, gx, gy, halfPixel, lineClamp);
 
 				// reconstruct uv
-				float2 uv = i.uvw.xy / i.uvw.z;
+				float2 uv;
+				uv.x = i.uvw.x / i.uvw.z;
+				uv.y = i.uvw.y / i.uvw.z;
 
-//				float alpha = AA_threshold(abs(0.5f - uv.y), 0.25f, 0.5f, uv);
 				float alpha = Stripe(uv.y, 0.5f, LINESIZE);
 
-				float4 col = float4(1.0f, 1.0f, 0.0f, alpha); // , alpha, 0.0f, 1.0f);
+				float endAlpha = AA_threshold(
+					abs(uv.x - 0.5f),
+					0.50f,
+					1.0f,
+					uv.xx);
+
+				float4 col = float4(1.0f, 1.0f, 0.0f, alpha * endAlpha);
 
 				// apply fog
                 // UNITY_APPLY_FOG(i.fogCoord, col);
