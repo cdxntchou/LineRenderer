@@ -15,7 +15,8 @@
 			Cull Off
 			ZTest Always
 			ZWrite Off
-			Blend Off
+//			Blend Off
+			Blend SrcAlpha OneMinusSrcAlpha
 
             CGPROGRAM
 			#pragma target 5.0
@@ -38,9 +39,9 @@
 
             struct v2f
             {
-//                float2 uv : TEXCOORD0;
+                float3 uvw : TEXCOORD0;
+				float4 color : TEXCOORD1;
 //				float4 position : TEXCOORD1;
-				float4 color : TEXCOORD2;
 				// UNITY_FOG_COORDS(2)
                 float4 vertex : SV_POSITION;
 //                UNITY_VERTEX_INPUT_INSTANCE_ID // necessary only if you want to access instanced properties in fragment Shader.
@@ -63,6 +64,7 @@
 				UNITY_DEFINE_INSTANCED_PROP(float4, _LineClamp)
 			UNITY_INSTANCING_BUFFER_END(Props)
 
+#define LINESIZE 8
 
             v2f vert(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_InstanceID)
             {
@@ -81,22 +83,26 @@
 				float3 p0 = _LineBuffer[lineIndex].v0;
 				float3 p1 = _LineBuffer[lineIndex].v1;
 				float3 delta = p1 - p0;
+				float3 deltaNormalized = normalize(delta);
 
 				float3 p0ToCamera = _WorldSpaceCameraPos - p0;
 				float3 p1ToCamera = _WorldSpaceCameraPos - p1;
 				float p0Dist = length(p0ToCamera);
 				float p1Dist = length(p1ToCamera);
 
-				float p0PixelSize = 0.004f * p0Dist; // / p0Dist;
-				float p1PixelSize = 0.004f * p1Dist; // / p1Dist;
+				float lineSize = 0.001f * LINESIZE;		// TODO: correct for projection and per-line pixel size
+				float p0PixelSize = lineSize * p0Dist;
+				float p1PixelSize = lineSize * p1Dist;
 
 				float3 p0Perp = normalize(cross(delta, p0ToCamera)) * p0PixelSize;
 				float3 p1Perp = normalize(cross(delta, p1ToCamera)) * p1PixelSize;
 
 				// not quite correct because it doesn't take projection into account...
 				// but close enough in most cases?
-				float3 v0 = p0 - normalize(delta) * p0PixelSize;
-				float3 v1 = p1 + normalize(delta) * p1PixelSize;
+				// we're doing everything in 3D to try to retain the 3D depth info (if we want to clip against a depth buffer)
+				// but we could instead project everything to a uniform depth in screenspace and all the lines would be perfect
+				float3 v0 = p0 - deltaNormalized * p0PixelSize;
+				float3 v1 = p1 + deltaNormalized * p1PixelSize;
 
 				float3 v0_0 = v0 - p0Perp;
 				float3 v0_1 = v0 + p0Perp;
@@ -109,7 +115,7 @@
 						lerp(v0_0, v0_1, quadV.y),
 						lerp(v1_0, v1_1, quadV.y),
 						quadV.x);
-
+/*
 				// find orthogonal transform, mapping (0,0) -> p0, and (1,0) -> p1
 				// F(p).x=	p.x * fx.x + p.y * fx.y + fx.z
 				// F(p).y=	p.x * fy.x + p.y * fy.y + fx.z
@@ -132,6 +138,7 @@
 				ify.x = fx.y / length2;
 				ify.y = fy.y / length2;
 				ify.z = (-fx.z * ify.x) + (-fy.z * ify.y);
+*/
 
 				// todo: can we setup instance id properly here?
 //                UNITY_SETUP_INSTANCE_ID(v);
@@ -148,7 +155,8 @@
 
 //				o.position = ComputeScreenPos(o.vertex);
 
-//              o.uv = v.uv;
+				// we have to correct the uv coordinates we pass down, so they are interpolated in screenspace not in 3D space
+				o.uvw = float3(quadV * o.vertex.w, o.vertex.w);
 				o.color = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
 				// UNITY_TRANSFER_FOG(o,o.vertex);
@@ -177,7 +185,40 @@
 				return overlap_x * overlap_y;
 			}
 
-            fixed4 frag (v2f i) : SV_Target
+			float AA_threshold(
+				float SDF,
+				float threshold,
+				float tweak,			// AA tweak value -- smaller values are blurrier, larger values are crisper, default depends on your SDF
+				float2 continuous_UV)		// used to approximate local gradients, only works if the UVs are continuous
+			{
+				// compute AA scale, as a function of the local gradients
+				float4 derivatives =
+					float4(
+						ddx(continuous_UV),
+						ddy(continuous_UV)
+					);
+
+				float2 duv_length =
+					float2(
+						sqrt(dot(derivatives.xz, derivatives.xz)),
+						sqrt(dot(derivatives.yw, derivatives.yw))
+					);
+
+				float scale = tweak / (duv_length.x + duv_length.y);
+
+				return saturate(1.0f - scale * (SDF - threshold));
+			}
+
+			float Stripe(in float x, in float stripeX, in float pixelWidth)
+			{
+				// compute derivatives to get ddx / pixel
+				float2 derivatives = float2(ddx(x), ddy(x));
+				float derivLen = length(derivatives);
+				float sharpen = 1.0f / max(derivLen, 0.00001f);
+				return saturate(0.5f + 0.5f * (0.5f * pixelWidth - sharpen * abs(x - stripeX)));
+			}
+
+            float4 frag (v2f i) : SV_Target
             {
 //                UNITY_SETUP_INSTANCE_ID(i); // necessary only if any instanced properties are going to be accessed in the fragment Shader.
 
@@ -187,7 +228,13 @@
 //				float2 pixelPosition = i.position * _ScreenParams.xy;
 //				float alpha = line_aa(pixelPosition, fx, fy, gx, gy, halfPixel, lineClamp);
 
-				float4 col = i.color;
+				// reconstruct uv
+				float2 uv = i.uvw.xy / i.uvw.z;
+
+//				float alpha = AA_threshold(abs(0.5f - uv.y), 0.25f, 0.5f, uv);
+				float alpha = Stripe(uv.y, 0.5f, LINESIZE);
+
+				float4 col = float4(1.0f, 1.0f, 0.0f, alpha); // , alpha, 0.0f, 1.0f);
 
 				// apply fog
                 // UNITY_APPLY_FOG(i.fogCoord, col);
