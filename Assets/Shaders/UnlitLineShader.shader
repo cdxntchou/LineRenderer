@@ -16,8 +16,8 @@
 			ZTest Always
 			ZWrite Off
 //			Blend Off
-//			Blend SrcAlpha One
-			Blend SrcAlpha OneMinusSrcAlpha
+			Blend SrcAlpha One
+//			Blend SrcAlpha OneMinusSrcAlpha
 
             CGPROGRAM
 			#pragma target 5.0
