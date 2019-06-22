@@ -4,8 +4,6 @@
     {
         _MainTex ("Texture", 2D) = "white" {}
 		_Color("Color", Color) = (1,1,1,1)
-		_CoordX("CoordX", Color) = (0, 0, 1, 1)
-		_CoordY("CoordY", Color) = (0, 1, 0, 1)
 	}
     SubShader
     {
@@ -20,7 +18,8 @@
 			Blend Off
 
             CGPROGRAM
-            #pragma vertex vert
+			#pragma target 5.0
+			#pragma vertex vert
             #pragma fragment frag
             
             // make fog work
@@ -29,22 +28,22 @@
 
             #include "UnityCG.cginc"
 
-            struct s_vs_in
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-				float2 uv2 : TEXCOORD1;
-				UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
+			// this struct should match the memory layout of LineRendererProxy.Line
+			struct Line
+			{
+				float3 v0;
+				float3 v1;
+			};
+			StructuredBuffer<Line> _LineBuffer;
 
             struct v2f
             {
-                float2 uv : TEXCOORD0;
-				float4 position : TEXCOORD1;
+//                float2 uv : TEXCOORD0;
+//				float4 position : TEXCOORD1;
 				float4 color : TEXCOORD2;
 				// UNITY_FOG_COORDS(2)
                 float4 vertex : SV_POSITION;
-                UNITY_VERTEX_INPUT_INSTANCE_ID // necessary only if you want to access instanced properties in fragment Shader.
+//                UNITY_VERTEX_INPUT_INSTANCE_ID // necessary only if you want to access instanced properties in fragment Shader.
             };
 
             sampler2D _MainTex;
@@ -64,34 +63,93 @@
 				UNITY_DEFINE_INSTANCED_PROP(float4, _LineClamp)
 			UNITY_INSTANCING_BUFFER_END(Props)
 
-            v2f vert (s_vs_in v)
+
+            v2f vert(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_InstanceID)
             {
                 v2f o;
 
-                UNITY_SETUP_INSTANCE_ID(v);
-                UNITY_TRANSFER_INSTANCE_ID(v, o); // necessary only if you want to access instanced properties in the fragment Shader.
+				float lineIndex = floor((vertexIndex + 0.5f) / 6);
+				float lineVertex = vertexIndex - lineIndex * 6;			// 0 - 5
 
-				float4 coordX= UNITY_ACCESS_INSTANCED_PROP(Props, _CoordX);
-				float4 coordY= UNITY_ACCESS_INSTANCED_PROP(Props, _CoordY);
+				// each quad is defined by 6 vertices (two triangles):
+				// quadV.x = 0, 0, 1, 1, 1, 0
+				// quadV.y = 0, 1, 1, 1, 0, 0
+				float2 quadV = (float2)
+					(frac((lineVertex.xx + float2(5.5f, 4.5f)) / 6.0f) > 0.5f);
 
-				float cornerIndex = v.uv2.x;
+				// two line end points
+				float3 p0 = _LineBuffer[lineIndex].v0;
+				float3 p1 = _LineBuffer[lineIndex].v1;
+				float3 delta = p1 - p0;
 
-				float4 cornerMask = (cornerIndex == float4(0.0f, 1.0f, 2.0f, 3.0f));	// select mask
-				float2 transformedCoords;
-				transformedCoords.x = dot(cornerMask, coordX);
-				transformedCoords.y = dot(cornerMask, coordY);
+				float3 p0ToCamera = _WorldSpaceCameraPos - p0;
+				float3 p1ToCamera = _WorldSpaceCameraPos - p1;
+				float p0Dist = length(p0ToCamera);
+				float p1Dist = length(p1ToCamera);
+
+				float p0PixelSize = 0.004f * p0Dist; // / p0Dist;
+				float p1PixelSize = 0.004f * p1Dist; // / p1Dist;
+
+				float3 p0Perp = normalize(cross(delta, p0ToCamera)) * p0PixelSize;
+				float3 p1Perp = normalize(cross(delta, p1ToCamera)) * p1PixelSize;
+
+				// not quite correct because it doesn't take projection into account...
+				// but close enough in most cases?
+				float3 v0 = p0 - normalize(delta) * p0PixelSize;
+				float3 v1 = p1 + normalize(delta) * p1PixelSize;
+
+				float3 v0_0 = v0 - p0Perp;
+				float3 v0_1 = v0 + p0Perp;
+
+				float3 v1_0 = v1 - p1Perp;
+				float3 v1_1 = v1 + p1Perp;
+
+				float3 vertexPositionWorld=
+					lerp(
+						lerp(v0_0, v0_1, quadV.y),
+						lerp(v1_0, v1_1, quadV.y),
+						quadV.x);
+
+				// find orthogonal transform, mapping (0,0) -> p0, and (1,0) -> p1
+				// F(p).x=	p.x * fx.x + p.y * fx.y + fx.z
+				// F(p).y=	p.x * fy.x + p.y * fy.y + fx.z
+				float3 fx;
+				fx.x = delta.x;
+				fx.y = delta.y;
+				fx.z = p0.x;
+
+				float3 fy;
+				fy.x = delta.y;
+				fy.y = -delta.x;
+				fy.z = p0.y;
+
+				// invert matrix:		mapping (p0_t0) -> (0, 0)  and (p1_t0) -> (1, 0)
+				float length2 = dot(delta, delta);
+				float3 ifx, ify;
+				ifx.x = fx.x / length2;
+				ifx.y = fy.x / length2;
+				ifx.z = (-fx.z * ifx.x) + (-fy.z * ifx.y);
+				ify.x = fx.y / length2;
+				ify.y = fy.y / length2;
+				ify.z = (-fx.z * ify.x) + (-fy.z * ify.y);
+
+				// todo: can we setup instance id properly here?
+//                UNITY_SETUP_INSTANCE_ID(v);
+//                UNITY_TRANSFER_INSTANCE_ID(v, o); // necessary only if you want to access instanced properties in the fragment Shader.
 
 				// convert to position, etc.
 //				o.vertex.xy = transformedCoords * _PositionTransform.xy + _PositionTransform.zw;
-				o.vertex.xy = transformedCoords * float2(2.0f, -2.0f) / _ScreenParams.xy + float2(-1.0f, 1.0f);
-				o.vertex.zw = 1.0f;
 
-//				o.vertex = UnityObjectToClipPos(v.vertex.xyz);
+//				o.vertex.xy = transformedCoords * float2(2.0f, -2.0f) / _ScreenParams.xy + float2(-1.0f, 1.0f);
+//				o.vertex.zw = 1.0f;
 
-				o.position = ComputeScreenPos(o.vertex);
+//				o.vertex = UnityObjectToClipPos(vertexPosition.xyz);
+				o.vertex = mul(UNITY_MATRIX_VP, float4(vertexPositionWorld.xyz, 1.0));
 
-                o.uv = v.uv;
-				o.color = float4(cornerMask.xyz, 1.0f);
+//				o.position = ComputeScreenPos(o.vertex);
+
+//              o.uv = v.uv;
+				o.color = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
 				// UNITY_TRANSFER_FOG(o,o.vertex);
                 return o;
@@ -121,22 +179,15 @@
 
             fixed4 frag (v2f i) : SV_Target
             {
-                UNITY_SETUP_INSTANCE_ID(i); // necessary only if any instanced properties are going to be accessed in the fragment Shader.
+//                UNITY_SETUP_INSTANCE_ID(i); // necessary only if any instanced properties are going to be accessed in the fragment Shader.
 
                 // sample the texture
 //                fixed4 col = tex2D(_MainTex, i.uv) * UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
 
-				float3 fx = UNITY_ACCESS_INSTANCED_PROP(Props, _Fx);
-				float3 fy = UNITY_ACCESS_INSTANCED_PROP(Props, _Fy);
-				float3 gx = UNITY_ACCESS_INSTANCED_PROP(Props, _Gx);
-				float3 gy = UNITY_ACCESS_INSTANCED_PROP(Props, _Gy);
-				float2 halfPixel = UNITY_ACCESS_INSTANCED_PROP(Props, _HalfPixel);
-				float4 lineClamp = UNITY_ACCESS_INSTANCED_PROP(Props, _LineClamp);
+//				float2 pixelPosition = i.position * _ScreenParams.xy;
+//				float alpha = line_aa(pixelPosition, fx, fy, gx, gy, halfPixel, lineClamp);
 
-				float2 pixelPosition = i.position * _ScreenParams.xy;
-				float alpha = line_aa(pixelPosition, fx, fy, gx, gy, halfPixel, lineClamp);
-
-				float4 col = float4(alpha.xxx, 1.0f); // i.position;
+				float4 col = i.color;
 
 				// apply fog
                 // UNITY_APPLY_FOG(i.fogCoord, col);

@@ -153,6 +153,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   theMaterial: {fileID: 2100000, guid: e8ea84e3afb69264cb1bddfa4f5023da, type: 2}
+  forceRebuild: 0
 --- !u!65 &1196243951
 BoxCollider:
   m_ObjectHideFlags: 0
