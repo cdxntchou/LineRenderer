@@ -215,10 +215,10 @@ public class LineRendererProxy : MonoBehaviour
                 // TODO: 3d coordinates
                 DrawLineTest(
                     lineIndex,
-                    p0,      // p0, t0 pixel coordinates
-                    p1,      // p1, t0 pixel coordinates
-                    p0,      // p0, t1 pixel coordinates
-                    p1,      // p1, t1 pixel coordinates
+                    p0,                 // p0, t0 pixel coordinates
+                    p1,                 // p1, t0 pixel coordinates
+                    p0 + new Vector2(20.0f, 0.0f),                 // p0, t1 pixel coordinates
+                    p1 - new Vector2(50.0f, 0.0f),                 // p1, t1 pixel coordinates
                     line_width,         // pixels
                     aa_width);          // pixels
             }
