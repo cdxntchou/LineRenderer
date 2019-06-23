@@ -108,11 +108,20 @@ public class LineRendererProxy : MonoBehaviour
         {
             properties.SetBuffer("_LineBuffer", lineBuffer);
             properties.SetMatrix("_ObjectToWorldMatrix", transform.localToWorldMatrix);
+
+            // TODO : should use projection matrix instead of field of view
+            float verticalFOV = Camera.main.fieldOfView;
+            float degreesToRadians = 180.0f / 3.1415926535f;
+            float tangentSpaceHeight = Mathf.Abs(2.0f * Mathf.Tan(verticalFOV * 0.5f * degreesToRadians));
+            float pixelTangentSpaceHeight = tangentSpaceHeight / Camera.main.scaledPixelHeight;
+            // we assume square pixels, so pixel height ~= pixel size
+
+            properties.SetFloat("_PixelSizeTangentSpace", pixelTangentSpaceHeight);
         }
 
         // setup shared state
-//           properties.SetVector("_PositionTransform", new Vector4(
-//               2.0f / resolution.x, -2.0f / resolution.y, -1.0f, 1.0f);
+        //           properties.SetVector("_PositionTransform", new Vector4(
+        //               2.0f / resolution.x, -2.0f / resolution.y, -1.0f, 1.0f);
 
         // draw call
         int vertexCount = lineCount * 6;
