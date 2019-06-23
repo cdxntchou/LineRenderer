@@ -52,8 +52,10 @@
             sampler2D _MainTex;
             float4 _MainTex_ST;
 
-//			float4 _PositionTransform;
+			// could replace this with an instanced buffer for instanced rendering
+			float4x4 _ObjectToWorldMatrix;
 
+			// line buffer
 			UNITY_INSTANCING_BUFFER_START(Props)
 				UNITY_DEFINE_INSTANCED_PROP(float4, _Color)
 				UNITY_DEFINE_INSTANCED_PROP(float4, _CoordX)
@@ -87,8 +89,9 @@
 				float3 p0 = _LineBuffer[lineIndex].v0;
 				float3 p1 = _LineBuffer[lineIndex].v1;
 
-				// TODO: apply object -> world transform here!
-				// could do instanced if necessary
+				// apply object -> world transform here!  could do instanced in an ECS style batch submit
+				p0 = mul(_ObjectToWorldMatrix, float4(p0, 1.0f)).xyz;
+				p1 = mul(_ObjectToWorldMatrix, float4(p1, 1.0f)).xyz;
 
 				float3 color = _LineBuffer[lineIndex].color;
 				float3 delta = p1 - p0;

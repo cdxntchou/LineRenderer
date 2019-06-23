@@ -12,9 +12,6 @@ public class LineRendererProxy : MonoBehaviour
     [SerializeField]
     public Material theMaterial;
 
-    private Material localMaterial;
-
-    private List<Matrix4x4> matrices;
     private MaterialPropertyBlock properties;
 
     public bool forceRebuild;
@@ -94,9 +91,6 @@ public class LineRendererProxy : MonoBehaviour
                 lineBuffer.Release();
             lineBuffer = null;
             forceRebuild = false;
-
-            if (localMaterial != null)
-                localMaterial = null;
         }
 
         if (lineBuffer == null)
@@ -105,19 +99,15 @@ public class LineRendererProxy : MonoBehaviour
             BuildLineBuffer(mesh);
         }
 
-        if ((localMaterial == null) && (theMaterial != null))
-        {
-            localMaterial = new Material(theMaterial);
-        }
-
-        if (localMaterial != null)
-        {
-            localMaterial.SetBuffer("_LineBuffer", lineBuffer);
-        }
-
         if (properties == null)
         {
             properties = new MaterialPropertyBlock();
+        }
+
+        if (properties != null)
+        {
+            properties.SetBuffer("_LineBuffer", lineBuffer);
+            properties.SetMatrix("_ObjectToWorldMatrix", transform.localToWorldMatrix);
         }
 
         // setup shared state
@@ -129,10 +119,10 @@ public class LineRendererProxy : MonoBehaviour
         int instanceCount = 1;
         Camera camera = null;
 
-        if (localMaterial != null)
+        if (theMaterial != null)
         {
             Graphics.DrawProcedural(
-                localMaterial, lineBounds, MeshTopology.Triangles,
+                theMaterial, lineBounds, MeshTopology.Triangles,
                 vertexCount, instanceCount,
                 camera, properties,
                 ShadowCastingMode.Off, false, 0);
