@@ -5,9 +5,10 @@
         _MainTex ("Texture", 2D) = "white" {}
 		_Color("Color", Color) = (1,1,1,1)
 	}
+
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags { "RenderType"="Transparent" }
         LOD 100
 
         Pass
@@ -15,6 +16,7 @@
 			Cull Off
 			ZTest Always
 			ZWrite Off
+
 //			Blend Off
 			Blend One One
 //			Blend SrcAlpha OneMinusSrcAlpha
@@ -26,7 +28,7 @@
             
             // make fog work
 //            #pragma multi_compile_fog
-            #pragma multi_compile_instancing
+//            #pragma multi_compile_instancing
 
             #include "UnityCG.cginc"
 
@@ -57,19 +59,6 @@
 
 			// could replace this with an instanced buffer for instanced rendering
 			float4x4 _ObjectToWorldMatrix;
-
-			// line buffer
-			UNITY_INSTANCING_BUFFER_START(Props)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _Color)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _CoordX)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _CoordY)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _Fx)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _Fy)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _Gx)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _Gy)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _HalfPixel)
-				UNITY_DEFINE_INSTANCED_PROP(float4, _LineClamp)
-			UNITY_INSTANCING_BUFFER_END(Props)
 
 			// TODO: LINESIZE could be a material option, or per line
 			#define LINESIZE 0.5
@@ -110,7 +99,7 @@
 				float p1Dist = length(p1ToCamera);
 
 				float lineTweak = _PixelSizeTangentSpace * 0.5f;
-				float GLOWSIZE = 0.0f;	//  5.0;		// use this to expand the geometry for added glow
+				float GLOWSIZE = 0.0f;		// use this to expand the geometry for added glow
 				float lineSize = lineTweak * max(LINESIZE * 0.5f + 1.0f + GLOWSIZE, 1.0f);	// TODO: correct for edge-on projection
 				float p0PixelSize = lineSize * p0Dist;
 				float p1PixelSize = lineSize * p1Dist;
@@ -289,12 +278,14 @@
 					1.0f,
 					uv.xx);
 
-				float glow = 1.0f - 2.0f * abs(uv.y - 0.5f);
-				float3 glow_color = 0.2f * float3(0.9f, 0.5f, 0.1f);
+//				float glow = 1.0f - 2.0f * abs(uv.y - 0.5f);
+//				glow *= glow;
+//				float3 glow_color = 0.f * float3(0.9f, 0.5f, 0.1f);
 
 				float4 col;
 				col.rgb = i.color.rgb * saturate(alpha * endAlpha);
 //					+ glow_color * glow;		// uncomment this to add a glow around the lines
+//				col.rgb = 0.1f;
 
 				col.a = 1.0f;
 
