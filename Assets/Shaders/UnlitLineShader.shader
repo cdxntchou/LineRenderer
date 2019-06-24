@@ -25,7 +25,9 @@
 			#pragma target 5.0
 			#pragma vertex vert
             #pragma fragment frag
-            
+
+			#define DARKEN_BACKFACE
+
             // make fog work
 //            #pragma multi_compile_fog
 //            #pragma multi_compile_instancing
@@ -37,6 +39,8 @@
 			{
 				float3 v0;
 				float3 v1;
+				float3 n0;
+				float3 n1;
 				float3 color;
 			};
 			StructuredBuffer<Line> _LineBuffer;
@@ -193,8 +197,22 @@
 				uv.x *= o.vertex.w;
 				uv.y = quadV.y * o.vertex.w;
 
+				float shade = 1.0f;
+#ifdef DARKEN_BACKFACE
+				float3 n0 = _LineBuffer[lineIndex].n0;
+				float3 n1 = _LineBuffer[lineIndex].n1;
+				n0 = mul((float3x3) _ObjectToWorldMatrix, n0);
+				n1 = mul((float3x3) _ObjectToWorldMatrix, n1);
+				float wrap = 0.25f;
+				float shade0 = saturate(dot(n0, p0ToCamera / p0Dist) + wrap);
+				float shade1 = saturate(dot(n1, p1ToCamera / p1Dist) + wrap);
+				shade = lerp(shade0, shade1, quadV.x);
+				shade *= shade;
+				shade += 0.1f;
+#endif // DARKEN_BACKFACE
+
 				o.uvw = float3(uv, o.vertex.w);
-				o.color = float4(color.rgb, 1.0f);
+				o.color = float4(color.rgb * shade, 1.0f);
 
 				// UNITY_TRANSFER_FOG(o,o.vertex);
                 return o;

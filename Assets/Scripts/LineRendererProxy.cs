@@ -23,6 +23,8 @@ public class LineRendererProxy : MonoBehaviour
     {
         public Vector3 v0;
         public Vector3 v1;
+        public Vector3 n0;
+        public Vector3 n1;
         public Vector3 color;
     }
 
@@ -53,6 +55,8 @@ public class LineRendererProxy : MonoBehaviour
             {
                 v0 = mesh.vertices[v0],
                 v1 = mesh.vertices[v1],
+                n0 = mesh.normals[v0],
+                n1 = mesh.normals[v1],
                 color = new Vector3(1.0f, 0.5f, 0.2f),  //Random.value, Random.value, Random.value),
             });
     }
